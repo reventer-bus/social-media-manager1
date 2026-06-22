@@ -1,3 +1,5 @@
+# Maker AI — 3D Printing Platform for fofus.in
+# Backend: FastAPI + OrcaSlicer integration
 fastapi==0.110.0
 aiosqlite==0.20.0
 uvicorn[standard]==0.27.1
