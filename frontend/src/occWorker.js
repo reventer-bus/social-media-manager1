@@ -48,7 +48,7 @@ function addFillet(shape, params) {
     const fillet = new oc.BRepFilletAPI_MakeFillet(shape);
     const exp = new oc.TopExp_Explorer_2(shape, oc.TopAbs_ShapeEnum.TopAbs_EDGE, oc.TopAbs_ShapeEnum.TopAbs_SHAPE);
     while (exp.More()) {
-      try { fillet.Add_2(r, oc.TopoDS.Edge_1(exp.Current())); } catch(e) {}
+      try { fillet.Add_2(r, oc.TopoDS.Edge_1(exp.Current())); } catch { /* skip bad edge */ }
       exp.Next();
     }
     fillet.Build();

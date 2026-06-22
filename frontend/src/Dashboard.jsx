@@ -113,9 +113,11 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    poll()
-    const t = setInterval(poll, 5000)
-    return () => clearInterval(t)
+    let alive = true
+    const safePoll = async () => { if (alive) await poll() }
+    safePoll()
+    const t = setInterval(safePoll, 5000)
+    return () => { alive = false; clearInterval(t) }
   }, [])
 
   const triggerSlice = async () => {
