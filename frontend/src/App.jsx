@@ -118,29 +118,45 @@ function App() {
   }
 
   const sendToFarm = async () => {
+    const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const N8N = import.meta.env.VITE_N8N_URL
     setStatus('sending...')
     setFarmResponse(null)
     try {
       const spec_id = `gridfinity-${params.grid_x}x${params.grid_y}x${params.height_u}`
       const claimed_time = params.grid_x * params.grid_y * params.height_u * 600
       const claimed_weight = params.grid_x * params.grid_y * params.height_u * 3.5
-      const formData = new FormData()
-      const fileRes = await fetch('/sliced_output.3mf')
-      const blob = await fileRes.blob()
-      formData.append('data', blob, 'design.3mf')
-      formData.append('spec_id', spec_id)
-      formData.append('spec_version', 'v0')
-      formData.append('material', 'PLA')
-      formData.append('qty', '1')
-      formData.append('machine_class', 'BambuA1')
-      formData.append('claimed_time_seconds', String(claimed_time))
-      formData.append('claimed_weight_grams', String(claimed_weight))
-      const res = await fetch((import.meta.env.VITE_N8N_URL || 'http://localhost:5678') + '/webhook/farm-intake', { method: 'POST', body: formData })
-      const data = await res.json()
-      setFarmResponse(data)
-      setStatus(data.flagged_for_review ? '⚠️ flagged!' : '✅ sent!')
+
+      // If n8n is configured, use the full webhook pipeline
+      if (N8N) {
+        const formData = new FormData()
+        const fileRes = await fetch('/sliced_output.3mf')
+        const blob = await fileRes.blob()
+        formData.append('data', blob, 'design.3mf')
+        formData.append('spec_id', spec_id)
+        formData.append('spec_version', 'v0')
+        formData.append('material', 'PLA')
+        formData.append('qty', '1')
+        formData.append('machine_class', 'BambuA1')
+        formData.append('claimed_time_seconds', String(claimed_time))
+        formData.append('claimed_weight_grams', String(claimed_weight))
+        const res = await fetch(N8N + '/webhook/farm-intake', { method: 'POST', body: formData })
+        const data = await res.json()
+        setFarmResponse(data)
+        setStatus(data.flagged_for_review ? '⚠️ flagged!' : '✅ sent!')
+      } else {
+        // No n8n — slice directly via FastAPI backend
+        const res = await fetch(`${API}/api/v1/slicer/slice`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ material: 'PLA', machine: 'BambuA1', claimed_time_seconds: claimed_time, claimed_weight_grams: claimed_weight })
+        })
+        const data = await res.json()
+        setFarmResponse(data)
+        setStatus(data.error ? 'slice error' : data.flagged_for_review ? '⚠️ flagged!' : '✅ sliced!')
+      }
     } catch (err) {
-      setStatus('Send failed: ' + err.message)
+      setStatus('Failed: ' + err.message)
     }
   }
 
