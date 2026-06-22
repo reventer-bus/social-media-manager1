@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -14,6 +14,26 @@ const ORDER_COLOR = {
 }
 
 const MAT_COLOR = { PLA: '#00ff88', PETG: '#4a9eff', ABS: '#ff9800', TPU: '#aa44ff', ASA: '#ff6644', NYLON: '#ffcc00' }
+
+// ─── Slicer constants ──────────────────────────────────────────────────────────
+
+const SLICER_PRESETS = {
+  Standard: { layerHeight: '0.20', infillDensity: 15, infillPattern: 'Grid',        walls: 2, topLayers: 4, bottomLayers: 3, supportType: 'none', supportThreshold: 45, printSpeed: 200, travelSpeed: 250, nozzleTemp: 220, bedTemp: 60 },
+  Quality:  { layerHeight: '0.10', infillDensity: 20, infillPattern: 'Gyroid',      walls: 3, topLayers: 5, bottomLayers: 4, supportType: 'none', supportThreshold: 40, printSpeed: 100, travelSpeed: 200, nozzleTemp: 215, bedTemp: 60 },
+  Speed:    { layerHeight: '0.30', infillDensity: 10, infillPattern: 'Rectilinear', walls: 2, topLayers: 3, bottomLayers: 2, supportType: 'none', supportThreshold: 50, printSpeed: 300, travelSpeed: 350, nozzleTemp: 225, bedTemp: 65 },
+  Draft:    { layerHeight: '0.35', infillDensity:  5, infillPattern: 'Rectilinear', walls: 1, topLayers: 3, bottomLayers: 2, supportType: 'none', supportThreshold: 55, printSpeed: 350, travelSpeed: 400, nozzleTemp: 230, bedTemp: 65 },
+}
+
+const INFILL_PATTERNS = ['Rectilinear', 'Grid', 'Triangles', 'Tri-hexagon', 'Cubic', 'Cubic Subdivision', 'Gyroid', 'Honeycomb', 'Adaptive Cubic', 'Lightning']
+const LAYER_HEIGHTS   = ['0.05', '0.08', '0.10', '0.12', '0.15', '0.20', '0.25', '0.28', '0.30', '0.35']
+const MACHINES        = ['BambuA1', 'BambuA1Mini', 'BambuP1S', 'BambuX1C', 'PrusaMK4', 'PrusaMINI', 'CrealityEnder3', 'VoronTrident', 'Custom']
+const SLICER_MATS     = ['PLA', 'PETG', 'ABS', 'TPU', 'ASA', 'NYLON', 'PLA-CF', 'PA-CF']
+const MAT_TEMPS       = {
+  PLA: { nozzle: 220, bed: 60 }, PETG: { nozzle: 240, bed: 80 },
+  ABS: { nozzle: 250, bed: 100 }, TPU: { nozzle: 230, bed: 35 },
+  ASA: { nozzle: 250, bed: 100 }, NYLON: { nozzle: 270, bed: 90 },
+  'PLA-CF': { nozzle: 230, bed: 60 }, 'PA-CF': { nozzle: 280, bed: 100 },
+}
 
 // ─── Primitives ────────────────────────────────────────────────────────────────
 
@@ -373,6 +393,68 @@ function MiniBar({ label, value, max, color = '#00ff88', unit = '' }) {
   )
 }
 
+// ─── Slicer UI helpers ────────────────────────────────────────────────────────
+
+function DropZone({ file, onFile }) {
+  const [dragging, setDragging] = useState(false)
+  const inputRef = useRef(null)
+  const onDrop = (e) => {
+    e.preventDefault(); setDragging(false)
+    const f = e.dataTransfer?.files?.[0]
+    if (f && /\.(stl|3mf|obj)$/i.test(f.name)) onFile(f)
+  }
+  return (
+    <div
+      onClick={() => inputRef.current.click()}
+      onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={onDrop}
+      style={{
+        border: `1px dashed ${dragging ? '#00ff88' : file ? '#00ff8844' : '#1e1e1e'}`,
+        borderRadius: 8, padding: 14, cursor: 'pointer', textAlign: 'center',
+        background: dragging ? '#00ff8808' : file ? '#00ff8803' : 'rgba(255,255,255,0.01)',
+        transition: 'all 0.15s', marginBottom: 14
+      }}
+    >
+      <input ref={inputRef} type="file" accept=".stl,.3mf,.obj" style={{ display: 'none' }}
+        onChange={e => e.target.files[0] && onFile(e.target.files[0])} />
+      {file ? (
+        <>
+          <div style={{ fontSize: 18, marginBottom: 4 }}>📄</div>
+          <div style={{ fontSize: 10, color: '#00ff88', fontFamily: 'monospace', wordBreak: 'break-all' }}>{file.name}</div>
+          <div style={{ fontSize: 9, color: '#333', marginTop: 3 }}>{(file.size / 1024).toFixed(0)} KB · click to change</div>
+        </>
+      ) : (
+        <>
+          <div style={{ fontSize: 22, opacity: 0.12, marginBottom: 6 }}>⬆</div>
+          <div style={{ fontSize: 10, color: '#2a2a2a' }}>Drop STL / 3MF / OBJ or click to browse</div>
+          <div style={{ fontSize: 9, color: '#1a1a1a', marginTop: 3 }}>or slice the last generated design below</div>
+        </>
+      )}
+    </div>
+  )
+}
+
+function SlicerParam({ label, children }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 9 }}>
+      <span style={{ fontSize: 9, color: '#3a3a3a', textTransform: 'uppercase', letterSpacing: '0.08em', width: 100, flexShrink: 0 }}>{label}</span>
+      <div style={{ flex: 1 }}>{children}</div>
+    </div>
+  )
+}
+
+const selectStyle = {
+  width: '100%', background: '#0d0d0d', border: '1px solid rgba(255,255,255,0.07)',
+  color: '#bbb', padding: '5px 8px', borderRadius: 5, fontSize: 11, fontFamily: 'monospace', cursor: 'pointer'
+}
+
+const numStyle = {
+  width: '100%', background: '#0d0d0d', border: '1px solid rgba(255,255,255,0.07)',
+  color: '#bbb', padding: '5px 8px', borderRadius: 5, fontSize: 11, fontFamily: 'monospace',
+  textAlign: 'right'
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -385,6 +467,11 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [tab, setTab] = useState('overview')
   const [alertsOpen, setAlertsOpen] = useState(false)
+  const [slicerFile, setSlicerFile] = useState(null)
+  const [slicerMaterial, setSlicerMaterial] = useState('PLA')
+  const [slicerMachine, setSlicerMachine] = useState('BambuA1')
+  const [slicerSettings, setSlicerSettings] = useState(SLICER_PRESETS.Standard)
+  const [activePreset, setActivePreset] = useState('Standard')
 
   const poll = useCallback(async () => {
     try {
@@ -415,13 +502,45 @@ export default function Dashboard() {
     return () => { alive = false; clearInterval(t) }
   }, [poll])
 
+  const applyPreset = (name) => {
+    setActivePreset(name)
+    const preset = SLICER_PRESETS[name]
+    setSlicerSettings(preset)
+    if (MAT_TEMPS[slicerMaterial]) {
+      setSlicerSettings({ ...preset, nozzleTemp: MAT_TEMPS[slicerMaterial].nozzle, bedTemp: MAT_TEMPS[slicerMaterial].bed })
+    }
+  }
+
+  const setSetting = (key, value) => {
+    setActivePreset(null)
+    setSlicerSettings(prev => ({ ...prev, [key]: value }))
+  }
+
+  const handleMaterialChange = (mat) => {
+    setSlicerMaterial(mat)
+    if (MAT_TEMPS[mat]) {
+      setSlicerSettings(prev => ({ ...prev, nozzleTemp: MAT_TEMPS[mat].nozzle, bedTemp: MAT_TEMPS[mat].bed }))
+      setActivePreset(null)
+    }
+  }
+
   const triggerSlice = async () => {
     setSlicing(true); setSliceStatus(null)
     try {
-      const res = await fetch(`${API}/api/v1/slicer/slice`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ material: 'PLA', machine: 'BambuA1' })
-      })
+      let res
+      if (slicerFile) {
+        const fd = new FormData()
+        fd.append('file', slicerFile)
+        fd.append('material', slicerMaterial)
+        fd.append('machine', slicerMachine)
+        Object.entries(slicerSettings).forEach(([k, v]) => fd.append(k, String(v)))
+        res = await fetch(`${API}/api/v1/slicer/slice`, { method: 'POST', body: fd })
+      } else {
+        res = await fetch(`${API}/api/v1/slicer/slice`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ material: slicerMaterial, machine: slicerMachine, ...slicerSettings })
+        })
+      }
       setSliceStatus(await res.json())
     } catch (e) { setSliceStatus({ error: e.message }) }
     setSlicing(false)
@@ -766,40 +885,206 @@ export default function Dashboard() {
 
       {/* ── SLICER ─────────────────────────────────────────────────────────────── */}
       {tab === 'slicer' && (
-        <div style={{ maxWidth: 520 }}>
-          <SectionHead>OrcaSlicer — Direct Slice</SectionHead>
-          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: 10, padding: 20 }}>
-            <div style={{ fontSize: 10, color: '#333', marginBottom: 16, lineHeight: 1.8 }}>
-              Slices using <span style={{ color: '#aaa' }}>Bambu A1 · PLA · 0.20mm</span> profile and compares
-              actual vs claimed time/weight. Flags if deviation exceeds 10%.
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 900 }}>
+
+          {/* Left column — file + presets + machine setup */}
+          <div>
+            <SectionHead>File</SectionHead>
+            <DropZone file={slicerFile} onFile={setSlicerFile} />
+            {slicerFile && (
+              <button onClick={() => setSlicerFile(null)} style={{
+                fontSize: 9, padding: '3px 10px', background: 'transparent', border: '1px solid #1e1e1e',
+                color: '#333', cursor: 'pointer', borderRadius: 4, marginBottom: 14, display: 'block'
+              }}>✕ clear file</button>
+            )}
+
+            <SectionHead>Quick Preset</SectionHead>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 18 }}>
+              {Object.keys(SLICER_PRESETS).map(name => (
+                <button key={name} onClick={() => applyPreset(name)} style={{
+                  flex: 1, padding: '6px 4px', fontSize: 9, fontWeight: 600, cursor: 'pointer',
+                  letterSpacing: '0.06em', textTransform: 'uppercase', borderRadius: 5,
+                  background: activePreset === name ? '#00ff8815' : 'transparent',
+                  color: activePreset === name ? '#00ff88' : '#2a2a2a',
+                  border: activePreset === name ? '1px solid #00ff8830' : '1px solid #1a1a1a',
+                  transition: 'all 0.15s'
+                }}>{name}</button>
+              ))}
             </div>
-            <button onClick={triggerSlice} disabled={slicing} style={{
-              width: '100%', padding: 12, borderRadius: 6,
-              background: slicing ? '#0d0d0d' : '#00ff88',
-              color: slicing ? '#333' : '#000',
-              border: slicing ? '1px solid #1a1a1a' : 'none',
-              fontWeight: 800, fontSize: 11, cursor: slicing ? 'default' : 'pointer',
-              letterSpacing: '0.1em', textTransform: 'uppercase', transition: 'all 0.2s'
-            }}>
-              {slicing ? '⏳ Slicing...' : '◈ Slice Now'}
-            </button>
+
+            <SectionHead>Print Setup</SectionHead>
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: '14px 14px 6px' }}>
+              <SlicerParam label="Machine">
+                <select value={slicerMachine} onChange={e => setSlicerMachine(e.target.value)} style={selectStyle}>
+                  {MACHINES.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </SlicerParam>
+              <SlicerParam label="Material">
+                <select value={slicerMaterial} onChange={e => handleMaterialChange(e.target.value)} style={selectStyle}>
+                  {SLICER_MATS.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </SlicerParam>
+              <SlicerParam label="Layer Height">
+                <select value={slicerSettings.layerHeight} onChange={e => setSetting('layerHeight', e.target.value)} style={selectStyle}>
+                  {LAYER_HEIGHTS.map(h => <option key={h} value={h}>{h} mm</option>)}
+                </select>
+              </SlicerParam>
+            </div>
+
+            {/* Results */}
             {sliceStatus && (
-              <div style={{ marginTop: 14 }}>
+              <div style={{ marginTop: 16 }}>
+                <SectionHead>Last Result</SectionHead>
                 {sliceStatus.error
-                  ? <div style={{ color: '#ff4444', fontSize: 11 }}>{sliceStatus.error}</div>
-                  : <SliceCard entry={{ ...sliceStatus, spec_id: 'direct-slice', received_at: new Date().toISOString() }} />
+                  ? <div style={{ color: '#ff4444', fontSize: 11, padding: 10 }}>{sliceStatus.error}</div>
+                  : <SliceCard entry={{ ...sliceStatus, spec_id: slicerFile?.name || 'direct-slice', material: slicerMaterial, machine_class: slicerMachine, received_at: new Date().toISOString() }} />
                 }
               </div>
             )}
             {feedback.length > 0 && (
-              <>
-                <div style={{ marginTop: 20, marginBottom: 10, fontSize: 8, color: '#222', textTransform: 'uppercase', letterSpacing: '0.12em' }}>
-                  Previous Slices ({feedback.length})
-                </div>
-                {feedback.slice(0, 10).map((e, i) => <SliceCard key={i} entry={e} />)}
-              </>
+              <div style={{ marginTop: 16 }}>
+                <SectionHead>History ({feedback.length})</SectionHead>
+                {feedback.slice(0, 6).map((e, i) => <SliceCard key={i} entry={e} />)}
+              </div>
             )}
           </div>
+
+          {/* Right column — all OrcaSlicer parameters */}
+          <div>
+            {/* Infill */}
+            <SectionHead>Infill</SectionHead>
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: '14px 14px 6px', marginBottom: 14 }}>
+              <SlicerParam label="Density">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="range" min={0} max={100} step={5} value={slicerSettings.infillDensity}
+                    onChange={e => setSetting('infillDensity', Number(e.target.value))}
+                    style={{ flex: 1, accentColor: '#00ff88' }} />
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#00ff88', width: 36, textAlign: 'right' }}>
+                    {slicerSettings.infillDensity}%
+                  </span>
+                </div>
+              </SlicerParam>
+              <SlicerParam label="Pattern">
+                <select value={slicerSettings.infillPattern} onChange={e => setSetting('infillPattern', e.target.value)} style={selectStyle}>
+                  {INFILL_PATTERNS.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </SlicerParam>
+            </div>
+
+            {/* Walls */}
+            <SectionHead>Walls &amp; Layers</SectionHead>
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: '14px 14px 6px', marginBottom: 14 }}>
+              <SlicerParam label="Perimeters">
+                <input type="number" min={1} max={10} value={slicerSettings.walls}
+                  onChange={e => setSetting('walls', Number(e.target.value))} style={numStyle} />
+              </SlicerParam>
+              <SlicerParam label="Top Layers">
+                <input type="number" min={1} max={10} value={slicerSettings.topLayers}
+                  onChange={e => setSetting('topLayers', Number(e.target.value))} style={numStyle} />
+              </SlicerParam>
+              <SlicerParam label="Bottom Layers">
+                <input type="number" min={1} max={10} value={slicerSettings.bottomLayers}
+                  onChange={e => setSetting('bottomLayers', Number(e.target.value))} style={numStyle} />
+              </SlicerParam>
+            </div>
+
+            {/* Supports */}
+            <SectionHead>Support</SectionHead>
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: '14px 14px 10px', marginBottom: 14 }}>
+              <SlicerParam label="Type">
+                <div style={{ display: 'flex', gap: 6 }}>
+                  {[['none', 'None'], ['normal', 'Normal'], ['tree', 'Tree (Organic)']].map(([val, lbl]) => (
+                    <button key={val} onClick={() => setSetting('supportType', val)} style={{
+                      flex: 1, padding: '5px 4px', fontSize: 9, cursor: 'pointer', borderRadius: 4,
+                      background: slicerSettings.supportType === val ? '#4a9eff18' : 'transparent',
+                      color: slicerSettings.supportType === val ? '#4a9eff' : '#2a2a2a',
+                      border: slicerSettings.supportType === val ? '1px solid #4a9eff30' : '1px solid #1a1a1a',
+                      fontWeight: slicerSettings.supportType === val ? 700 : 400
+                    }}>{lbl}</button>
+                  ))}
+                </div>
+              </SlicerParam>
+              {slicerSettings.supportType !== 'none' && (
+                <SlicerParam label="Threshold">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <input type="range" min={15} max={80} step={5} value={slicerSettings.supportThreshold}
+                      onChange={e => setSetting('supportThreshold', Number(e.target.value))}
+                      style={{ flex: 1, accentColor: '#4a9eff' }} />
+                    <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#4a9eff', width: 36, textAlign: 'right' }}>
+                      {slicerSettings.supportThreshold}°
+                    </span>
+                  </div>
+                </SlicerParam>
+              )}
+            </div>
+
+            {/* Speed */}
+            <SectionHead>Speed</SectionHead>
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: '14px 14px 6px', marginBottom: 14 }}>
+              <SlicerParam label="Print Speed">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="range" min={20} max={500} step={10} value={slicerSettings.printSpeed}
+                    onChange={e => setSetting('printSpeed', Number(e.target.value))}
+                    style={{ flex: 1, accentColor: '#ff9800' }} />
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#ff9800', width: 52, textAlign: 'right' }}>
+                    {slicerSettings.printSpeed} mm/s
+                  </span>
+                </div>
+              </SlicerParam>
+              <SlicerParam label="Travel Speed">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="range" min={50} max={600} step={10} value={slicerSettings.travelSpeed}
+                    onChange={e => setSetting('travelSpeed', Number(e.target.value))}
+                    style={{ flex: 1, accentColor: '#ff9800' }} />
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#ff9800', width: 52, textAlign: 'right' }}>
+                    {slicerSettings.travelSpeed} mm/s
+                  </span>
+                </div>
+              </SlicerParam>
+            </div>
+
+            {/* Temperature */}
+            <SectionHead>Temperature</SectionHead>
+            <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: '14px 14px 6px', marginBottom: 18 }}>
+              <SlicerParam label="Nozzle">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="range" min={150} max={320} step={5} value={slicerSettings.nozzleTemp}
+                    onChange={e => setSetting('nozzleTemp', Number(e.target.value))}
+                    style={{ flex: 1, accentColor: '#ff4444' }} />
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#ff9800', width: 40, textAlign: 'right' }}>
+                    {slicerSettings.nozzleTemp}°C
+                  </span>
+                </div>
+              </SlicerParam>
+              <SlicerParam label="Bed">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <input type="range" min={0} max={130} step={5} value={slicerSettings.bedTemp}
+                    onChange={e => setSetting('bedTemp', Number(e.target.value))}
+                    style={{ flex: 1, accentColor: '#ff6644' }} />
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#ff9800', width: 40, textAlign: 'right' }}>
+                    {slicerSettings.bedTemp}°C
+                  </span>
+                </div>
+              </SlicerParam>
+            </div>
+
+            {/* Slice button */}
+            <button onClick={triggerSlice} disabled={slicing} style={{
+              width: '100%', padding: 13, borderRadius: 7,
+              background: slicing ? '#0d0d0d' : '#00ff88',
+              color: slicing ? '#333' : '#000',
+              border: slicing ? '1px solid #1a1a1a' : 'none',
+              fontWeight: 800, fontSize: 12, cursor: slicing ? 'default' : 'pointer',
+              letterSpacing: '0.1em', textTransform: 'uppercase', transition: 'all 0.2s'
+            }}>
+              {slicing ? '⏳ Slicing...' : `◈ Slice Now${slicerFile ? ` — ${slicerFile.name.slice(0, 20)}` : ''}`}
+            </button>
+            <div style={{ fontSize: 8, color: '#1a1a1a', marginTop: 6, textAlign: 'center' }}>
+              {slicerMachine} · {slicerMaterial} · {slicerSettings.layerHeight}mm · {slicerSettings.infillDensity}% {slicerSettings.infillPattern}
+              {slicerSettings.supportType !== 'none' ? ` · ${slicerSettings.supportType} supports` : ''}
+            </div>
+          </div>
+
         </div>
       )}
     </div>
