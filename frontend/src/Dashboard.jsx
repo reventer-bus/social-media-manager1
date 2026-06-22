@@ -472,24 +472,36 @@ export default function Dashboard() {
   const [slicerMachine, setSlicerMachine] = useState('BambuA1')
   const [slicerSettings, setSlicerSettings] = useState(SLICER_PRESETS.Standard)
   const [activePreset, setActivePreset] = useState('Standard')
+  const [apiUrl, setApiUrl] = useState(() => localStorage.getItem('pd_api_url') || API)
+  const apiUrlRef = useRef(apiUrl)
+
+  const updateApiUrl = (raw) => {
+    const url = raw.trim().replace(/\/$/, '')
+    setApiUrl(url)
+    apiUrlRef.current = url
+    if (url && !url.includes('localhost')) localStorage.setItem('pd_api_url', url)
+    else localStorage.removeItem('pd_api_url')
+  }
+
+  const isLocalhost = apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1')
 
   const poll = useCallback(async () => {
+    const base = apiUrlRef.current
     try {
-      const res = await fetch(`${API}/api/v1/farm/status`)
-      if (!res.ok) throw new Error(`${res.status}`)
+      const res = await fetch(`${base}/api/v1/farm/status`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       setFarm(await res.json())
       setLastPoll(new Date())
       setError(null)
-    } catch (e) { setError(e.message) }
+    } catch (e) { setError(e.message === 'Failed to fetch' ? 'backend unreachable' : e.message) }
 
-    // Queue and inventory — gracefully handle missing endpoints
     try {
-      const r = await fetch(`${API}/api/v1/farm/queue`)
+      const r = await fetch(`${base}/api/v1/farm/queue`)
       if (r.ok) setQueue(await r.json())
     } catch { /* endpoint may not exist yet */ }
 
     try {
-      const r = await fetch(`${API}/api/v1/farm/inventory`)
+      const r = await fetch(`${base}/api/v1/farm/inventory`)
       if (r.ok) setInventory(await r.json())
     } catch { /* endpoint may not exist yet */ }
   }, [])
@@ -526,6 +538,7 @@ export default function Dashboard() {
 
   const triggerSlice = async () => {
     setSlicing(true); setSliceStatus(null)
+    const base = apiUrlRef.current
     try {
       let res
       if (slicerFile) {
@@ -534,20 +547,22 @@ export default function Dashboard() {
         fd.append('material', slicerMaterial)
         fd.append('machine', slicerMachine)
         Object.entries(slicerSettings).forEach(([k, v]) => fd.append(k, String(v)))
-        res = await fetch(`${API}/api/v1/slicer/slice`, { method: 'POST', body: fd })
+        res = await fetch(`${base}/api/v1/slicer/slice`, { method: 'POST', body: fd })
       } else {
-        res = await fetch(`${API}/api/v1/slicer/slice`, {
+        res = await fetch(`${base}/api/v1/slicer/slice`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ material: slicerMaterial, machine: slicerMachine, ...slicerSettings })
         })
       }
       setSliceStatus(await res.json())
-    } catch (e) { setSliceStatus({ error: e.message }) }
+    } catch (e) {
+      setSliceStatus({ error: e.message === 'Failed to fetch' ? 'Backend unreachable — paste your Railway URL in the API field above and try again.' : e.message })
+    }
     setSlicing(false)
   }
 
   const printerAction = async (id, action) => {
-    await fetch(`${API}/api/v1/printers/${id}/${action}`, { method: 'POST' })
+    await fetch(`${apiUrlRef.current}/api/v1/printers/${id}/${action}`, { method: 'POST' })
     poll()
   }
 
@@ -621,6 +636,41 @@ export default function Dashboard() {
         ::-webkit-scrollbar { width: 3px } ::-webkit-scrollbar-track { background: transparent }
         ::-webkit-scrollbar-thumb { background: #1a1a1a; border-radius: 2px }
       `}</style>
+
+      {/* API URL config bar */}
+      {isLocalhost && (
+        <div style={{
+          background: 'rgba(255,152,0,0.06)', border: '1px solid rgba(255,152,0,0.2)',
+          borderRadius: 8, padding: '10px 14px', marginBottom: 14,
+          display: 'flex', alignItems: 'center', gap: 10
+        }}>
+          <span style={{ fontSize: 11, flexShrink: 0 }}>⚠</span>
+          <span style={{ fontSize: 9, color: '#ff9800', flexShrink: 0 }}>BACKEND URL</span>
+          <input
+            value={apiUrl}
+            onChange={e => updateApiUrl(e.target.value)}
+            placeholder="https://your-app.railway.app"
+            style={{
+              flex: 1, background: '#0d0d0d', border: '1px solid rgba(255,152,0,0.2)',
+              color: '#ccc', padding: '5px 10px', borderRadius: 5, fontSize: 11, fontFamily: 'monospace'
+            }}
+          />
+          <span style={{ fontSize: 9, color: '#555', flexShrink: 0 }}>paste your Railway URL and press Enter</span>
+        </div>
+      )}
+      {!isLocalhost && (
+        <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 9, color: '#2a2a2a' }}>API:</span>
+          <input
+            value={apiUrl}
+            onChange={e => updateApiUrl(e.target.value)}
+            style={{
+              width: 280, background: 'transparent', border: 'none', borderBottom: '1px solid #1a1a1a',
+              color: '#2a2a2a', padding: '2px 4px', fontSize: 9, fontFamily: 'monospace'
+            }}
+          />
+        </div>
+      )}
 
       {/* Alert banner */}
       {alerts.length > 0 && (
@@ -889,6 +939,30 @@ export default function Dashboard() {
 
           {/* Left column — file + presets + machine setup */}
           <div>
+            <SectionHead>Backend Connection</SectionHead>
+            <div style={{
+              background: isLocalhost ? 'rgba(255,152,0,0.06)' : 'rgba(0,255,136,0.04)',
+              border: `1px solid ${isLocalhost ? 'rgba(255,152,0,0.2)' : 'rgba(0,255,136,0.1)'}`,
+              borderRadius: 8, padding: '10px 12px', marginBottom: 14
+            }}>
+              <div style={{ fontSize: 9, color: isLocalhost ? '#ff9800' : '#00ff88', marginBottom: 6, fontWeight: 600 }}>
+                {isLocalhost ? '⚠ Not connected — set your Railway URL' : '✓ Connected'}
+              </div>
+              <input
+                value={apiUrl}
+                onChange={e => updateApiUrl(e.target.value)}
+                placeholder="https://your-app.railway.app"
+                style={{
+                  width: '100%', background: '#0a0a0a',
+                  border: `1px solid ${isLocalhost ? 'rgba(255,152,0,0.2)' : 'rgba(0,255,136,0.15)'}`,
+                  color: '#ccc', padding: '6px 10px', borderRadius: 5, fontSize: 10, fontFamily: 'monospace'
+                }}
+              />
+              <div style={{ fontSize: 8, color: '#2a2a2a', marginTop: 5, lineHeight: 1.6 }}>
+                Find it in Railway → your backend service → Settings → Networking → Public URL
+              </div>
+            </div>
+
             <SectionHead>File</SectionHead>
             <DropZone file={slicerFile} onFile={setSlicerFile} />
             {slicerFile && (
