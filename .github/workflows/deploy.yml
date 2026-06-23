@@ -13,6 +13,7 @@ jobs:
   deploy-backend:
     name: Backend → Railway
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 
