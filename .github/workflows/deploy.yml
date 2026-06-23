@@ -22,11 +22,12 @@ jobs:
       - name: Deploy to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         # Runs from repo root — Dockerfile and railway.toml live here
         # Skips gracefully if RAILWAY_TOKEN secret is not configured
         run: |
           test -n "$RAILWAY_TOKEN" || { echo "RAILWAY_TOKEN not set — skipping"; exit 0; }
           railway up \
-            --project d8f71a07-6890-431b-8e99-425d5bcd97f8 \
+            ${RAILWAY_PROJECT_ID:+--project $RAILWAY_PROJECT_ID} \
             --environment production \
             --detach
