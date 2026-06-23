@@ -6,15 +6,15 @@ on:
   workflow_dispatch:
 
 jobs:
-  # Vercel deploys automatically via its GitHub App on every push.
-  # Railway deploys automatically via its GitHub App on every push.
-  # This job is a manual fallback using Railway CLI when the GitHub App
-  # is not connected — it skips gracefully if RAILWAY_TOKEN is not set.
+  # Vercel auto-deploys via its GitHub App on every push — no job needed.
 
+  # Railway CLI fallback — activates when RAILWAY_TOKEN secret is set.
+  # Railway's GitHub App also auto-deploys on push if the repo is connected.
   deploy-backend:
-    name: Backend → Railway (CLI fallback)
+    name: Backend → Railway
     runs-on: ubuntu-latest
-    if: ${{ vars.RAILWAY_DEPLOY_ENABLED == 'true' }}
+    # Skip if token is not configured
+    if: ${{ secrets.RAILWAY_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -24,10 +24,8 @@ jobs:
       - name: Deploy to Railway
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        # Run from root — Dockerfile and railway.toml are here
         run: |
           railway up \
-            --project d8f71a07-6890-431b-8e99-425d5bcd97f8 \
             --environment production \
-            --service maker-ai-backend \
             --detach
-        working-directory: ./backend
