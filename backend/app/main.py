@@ -65,3 +65,26 @@ app.include_router(shopify.router, prefix="/api/v1/shopify", tags=["shopify"])
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "Maker AI API", "business": "fofus.in"}
+
+
+@app.get("/")
+async def root():
+    return {
+        "service": "Maker AI API",
+        "version": "0.1.0",
+        "business": "fofus.in",
+        "docs": "/docs",
+        "openapi": "/openapi.json",
+        "endpoints": [
+            "GET  /health",
+            "GET  /api/v1/pricing/rates",
+            "POST /api/v1/pricing/calculate",
+            "GET  /api/v1/farm/status",
+            "GET  /api/v1/farm/queue",
+            "POST /api/v1/auth/register",
+            "POST /api/v1/auth/login",
+            "GET  /api/v1/auth/me   (requires JWT)",
+            "POST /api/v1/shopify/checkout",
+            "POST /api/v1/shopify/webhook",
+        ],
+    }
