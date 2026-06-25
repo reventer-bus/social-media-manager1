@@ -227,10 +227,76 @@ def add_shopify_order(job: dict) -> dict:
     """Accept a Shopify order webhook and push it into the farm queue."""
     job.setdefault("status", "NEW")
     job.setdefault("created_at", datetime.now(timezone.utc).isoformat())
+    job.setdefault("assigned_partner", None)
+    job.setdefault("admin_notes", "")
+    job.setdefault("packing_notes", "")
+    job.setdefault("parcel_code", "")
+    job.setdefault("tracking_url", "")
+    job.setdefault("history", [])
     # Avoid duplicates — Shopify may resend webhooks
     existing_ids = {o.get("id") for o in _orders}
     if job.get("id") in existing_ids:
+        # Update webhook re-fire with new fields (e.g. orders/paid after orders/create)
+        for o in _orders:
+            if o.get("id") == job.get("id"):
+                # Update event history; preserve operator-assigned fields
+                for k, v in job.items():
+                    if k not in ("assigned_partner", "admin_notes", "packing_notes",
+                                 "parcel_code", "tracking_url", "status", "history"):
+                        o[k] = v
+                o.setdefault("history", []).append({
+                    "event": "shopify_webhook_refire",
+                    "topic": job.get("_shopify_topic"),
+                    "at": datetime.now(timezone.utc).isoformat(),
+                })
+                _rewrite_jsonl(_ORDERS_PATH, _orders)
+                return o
         return job
+    # First-time webhook — initialize history
+    job["history"] = [{
+        "event": "shopify_webhook",
+        "topic": job.get("_shopify_topic"),
+        "at": datetime.now(timezone.utc).isoformat(),
+    }]
     _orders.append(job)
     _append_jsonl(_ORDERS_PATH, job)
     return job
+
+
+def assign_partner(order_id: str, partner_id: str) -> dict | None:
+    """Assign an order to a partner. Returns updated order or None."""
+    for o in _orders:
+        if o.get("id") == order_id or o.get("spec_id") == order_id:
+            o["assigned_partner"] = partner_id
+            o.setdefault("history", []).append({
+                "event": "assigned_partner",
+                "partner_id": partner_id,
+                "at": datetime.now(timezone.utc).isoformat(),
+            })
+            _rewrite_jsonl(_ORDERS_PATH, _orders)
+            return o
+    return None
+
+
+def list_partners_with_stats() -> list[dict]:
+    """Aggregate order stats per partner."""
+    partners: dict[str, dict] = {}
+    for o in _orders:
+        pid = o.get("assigned_partner")
+        if not pid:
+            continue
+        if pid not in partners:
+            partners[pid] = {"partner_id": pid, "active": 0, "completed": 0, "orders": []}
+        status = o.get("status", "NEW")
+        if status in ("DISPATCH", "CANCELLED"):
+            partners[pid]["completed"] += 1
+        else:
+            partners[pid]["active"] += 1
+        partners[pid]["orders"].append({"id": o.get("id"), "status": status,
+                                         "shopify_order": o.get("shopify_order")})
+    return list(partners.values())
+
+
+def orders_for_partner(partner_id: str) -> list[dict]:
+    """Return all orders assigned to a partner (active + completed)."""
+    return [o for o in _orders if o.get("assigned_partner") == partner_id]

@@ -838,26 +838,6 @@ function SliceCard({ entry }) {
           </div>
         ))}
       </div>
-      {entry.quote && (
-        <div style={{ marginTop: 8, padding: '7px 10px', background: '#00cc6608', border: '1px solid #00cc6620', borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ display: 'flex', gap: 14 }}>
-            {[
-              ['Material', `₹${entry.quote.material_cost}`],
-              ['Machine',  `₹${entry.quote.machine_cost}`],
-              ['Service',  `₹${entry.quote.service_fee}`],
-            ].map(([k, v]) => (
-              <div key={k}>
-                <div style={{ fontSize: 7, color: T?.textFaint ?? '#999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{k}</div>
-                <div style={{ fontSize: 9, color: T?.textDim ?? '#888', fontFamily: 'monospace' }}>{v}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <div style={{ fontSize: 7, color: T?.textFaint ?? '#999', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Total</div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: '#00cc66', fontFamily: 'monospace' }}>₹{entry.quote.total}</div>
-          </div>
-        </div>
-      )}
       <div style={{ marginTop: 7, fontSize: 8, color: T?.textFaint ?? '#1e1e1e' }}>{new Date(entry.received_at).toLocaleString()}</div>
     </div>
   )
@@ -965,7 +945,7 @@ function SlicerParam({ label, children }) {
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
-export default function Dashboard({ darkMode = false, role = 'partner' }) {
+export default function Dashboard({ darkMode = false }) {
   const [farm, setFarm] = useState({ printers: [], stats: {}, orders: [], feedback: [] })
   const [queue, setQueue] = useState([])
   const [inventory, setInventory] = useState([])
@@ -1170,8 +1150,6 @@ export default function Dashboard({ darkMode = false, role = 'partner' }) {
     { id: 'analytics',  label: 'Analytics',   icon: '◎' },
     { id: 'inventory',  label: 'Inventory',   icon: '⬜', badge: lowSpools.length || null },
     { id: 'slicer',     label: 'Slicer',      icon: '◈' },
-    { id: 'finance',    label: 'Finance',     icon: '₹' },
-    ...(role === 'admin' ? [{ id: 'admin', label: 'Admin', icon: '⚙' }] : []),
   ]
 
   const T = darkMode
@@ -1214,27 +1192,6 @@ export default function Dashboard({ darkMode = false, role = 'partner' }) {
         ::-webkit-scrollbar { width: 3px; height: 3px } ::-webkit-scrollbar-track { background: transparent }
         ::-webkit-scrollbar-thumb { background: ${T.border}; border-radius: 2px }
       `}</style>
-
-      {/* API URL bar */}
-      {isLocalhost && (
-        <div style={{
-          background: 'rgba(255,152,0,0.06)', border: '1px solid rgba(255,152,0,0.2)',
-          borderRadius: 8, padding: '10px 14px', marginBottom: 14,
-          display: 'flex', alignItems: 'center', gap: 10
-        }}>
-          <span style={{ fontSize: 11, flexShrink: 0 }}>⚠</span>
-          <span style={{ fontSize: 9, color: '#ff9800', flexShrink: 0 }}>BACKEND URL</span>
-          <input value={apiUrl} onChange={e => updateApiUrl(e.target.value)} placeholder="https://your-app.railway.app"
-            style={{ flex: 1, background: T.inputBg, border: '1px solid rgba(255,152,0,0.2)', color: T.text, padding: '5px 10px', borderRadius: 5, fontSize: 11, fontFamily: 'monospace' }} />
-        </div>
-      )}
-      {!isLocalhost && (
-        <div style={{ marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 9, color: T.textFaint }}>API:</span>
-          <input value={apiUrl} onChange={e => updateApiUrl(e.target.value)}
-            style={{ width: 280, background: 'transparent', border: 'none', borderBottom: `1px solid ${T.border}`, color: T.textFaint, padding: '2px 4px', fontSize: 9, fontFamily: 'monospace' }} />
-        </div>
-      )}
 
       {/* Alert banner */}
       {alerts.length > 0 && (
@@ -1629,21 +1586,23 @@ export default function Dashboard({ darkMode = false, role = 'partner' }) {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, maxWidth: 900 }}>
 
           <div>
-            <SectionHead>Backend Connection</SectionHead>
-            <div style={{
-              background: isLocalhost ? 'rgba(255,152,0,0.06)' : 'rgba(0,255,136,0.04)',
-              border: `1px solid ${isLocalhost ? 'rgba(255,152,0,0.2)' : 'rgba(0,255,136,0.1)'}`,
-              borderRadius: 8, padding: '10px 12px', marginBottom: 14
-            }}>
-              <div style={{ fontSize: 9, color: isLocalhost ? '#ff9800' : '#00cc66', marginBottom: 6, fontWeight: 600 }}>
-                {isLocalhost ? '⚠ Not connected — set your Railway URL' : '✓ Connected'}
+                      {isLocalhost && <SectionHead>Backend Connection</SectionHead>}
+                      {isLocalhost && (
+              <div style={{
+                background: 'rgba(255,152,0,0.06)',
+                border: '1px solid rgba(255,152,0,0.2)',
+                borderRadius: 8, padding: '10px 12px', marginBottom: 14
+              }}>
+                <div style={{ fontSize: 9, color: '#ff9800', marginBottom: 6, fontWeight: 600 }}>
+                  ⚠ Not connected — set your Railway URL
+                </div>
+                <input value={apiUrl} onChange={e => updateApiUrl(e.target.value)} placeholder="https://your-app.railway.app"
+                  style={{ width: '100%', background: T.inputBg, border: '1px solid rgba(255,152,0,0.2)', color: T.text, padding: '6px 10px', borderRadius: 5, fontSize: 10, fontFamily: 'monospace' }} />
+                <div style={{ fontSize: 8, color: T.textDim, marginTop: 5, lineHeight: 1.6 }}>
+                  Railway → backend service → Settings → Networking → Public URL
+                </div>
               </div>
-              <input value={apiUrl} onChange={e => updateApiUrl(e.target.value)} placeholder="https://your-app.railway.app"
-                style={{ width: '100%', background: T.inputBg, border: `1px solid ${isLocalhost ? 'rgba(255,152,0,0.2)' : 'rgba(0,204,102,0.15)'}`, color: T.text, padding: '6px 10px', borderRadius: 5, fontSize: 10, fontFamily: 'monospace' }} />
-              <div style={{ fontSize: 8, color: T.textDim, marginTop: 5, lineHeight: 1.6 }}>
-                Railway → backend service → Settings → Networking → Public URL
-              </div>
-            </div>
+            )}
 
             <SectionHead>File</SectionHead>
             <DropZone file={slicerFile} onFile={setSlicerFile} />
@@ -1834,155 +1793,6 @@ export default function Dashboard({ darkMode = false, role = 'partner' }) {
           </div>
         </div>
       )}
-    </div>
-
-      {/* ── Finance Tab ─────────────────────────────────── */}
-      {tab === 'finance' && (() => {
-        const completedSlices = feedback.filter(f => !f.flagged_for_review && f.quote)
-        const totalRevenue = completedSlices.reduce((s, f) => s + (f.quote?.total ?? 0), 0)
-        const avgOrder = completedSlices.length > 0 ? totalRevenue / completedSlices.length : 0
-
-        const byDay = {}
-        completedSlices.forEach(f => {
-          const day = f.ts ? new Date(f.ts * 1000).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }) : 'Unknown'
-          if (!byDay[day]) byDay[day] = { revenue: 0, jobs: 0 }
-          byDay[day].revenue += f.quote?.total ?? 0
-          byDay[day].jobs += 1
-        })
-        const days = Object.entries(byDay).slice(-7)
-        const maxRev = Math.max(...days.map(([, d]) => d.revenue), 1)
-
-        const SERVICE_FEE_PCT = 0.15
-        const commission = totalRevenue * (1 - SERVICE_FEE_PCT)
-        const platformFee = totalRevenue * SERVICE_FEE_PCT
-
-        return (
-          <div style={{ padding: '16px 20px' }}>
-            <SectionHead>Finance Overview</SectionHead>
-
-            {/* Summary cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10, marginBottom: 20 }}>
-              {[
-                ['Total Revenue', `₹${totalRevenue.toFixed(0)}`, '#00cc66', `${completedSlices.length} orders`],
-                ['Your Earnings (85%)', `₹${commission.toFixed(0)}`, '#4a9eff', 'After platform fee'],
-                ['Platform Fee (15%)', `₹${platformFee.toFixed(0)}`, T.textFaint, 'FOFUS cut'],
-                ['Avg Order Value', `₹${avgOrder.toFixed(0)}`, T.text, 'Per completed print'],
-              ].map(([label, val, color, sub]) => (
-                <div key={label} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 10, color: T.textDim, marginBottom: 4 }}>{label}</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: color, marginBottom: 2 }}>{val}</div>
-                  <div style={{ fontSize: 9, color: T.textFaint }}>{sub}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Daily revenue bar chart */}
-            <SectionHead>Last 7 Days</SectionHead>
-            {days.length === 0 ? (
-              <div style={{ textAlign: 'center', color: T.textFaint, fontSize: 11, padding: '24px 0' }}>
-                No completed orders yet — run slices to generate revenue data.
-              </div>
-            ) : (
-              <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: '14px 16px', marginBottom: 20 }}>
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 80 }}>
-                  {days.map(([day, d]) => (
-                    <div key={day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-                      <div style={{ fontSize: 8, color: T.textFaint }}>₹{d.revenue.toFixed(0)}</div>
-                      <div style={{ width: '100%', background: '#00cc66', borderRadius: '3px 3px 0 0', height: `${Math.round((d.revenue / maxRev) * 60) + 4}px`, minHeight: 4 }} />
-                      <div style={{ fontSize: 8, color: T.textFaint, whiteSpace: 'nowrap' }}>{day}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Payouts table */}
-            <SectionHead>Recent Payouts</SectionHead>
-            <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 70px', fontSize: 9, fontWeight: 600, color: T.textFaint, padding: '8px 12px', borderBottom: `1px solid ${T.border}` }}>
-                <span>ORDER</span><span style={{ textAlign: 'right' }}>TOTAL</span><span style={{ textAlign: 'right' }}>YOUR CUT</span><span style={{ textAlign: 'right' }}>STATUS</span>
-              </div>
-              {completedSlices.length === 0 && (
-                <div style={{ fontSize: 11, color: T.textFaint, padding: '16px 12px', textAlign: 'center' }}>No payouts yet</div>
-              )}
-              {completedSlices.slice(0, 10).map((f, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 70px', fontSize: 10, color: T.text, padding: '7px 12px', borderBottom: `1px solid ${T.border}`, alignItems: 'center' }}>
-                  <span style={{ color: T.textDim }}>{f.material ?? 'PLA'} · {(f.actual_weight_grams ?? 0).toFixed(1)}g</span>
-                  <span style={{ textAlign: 'right', color: T.text }}>₹{(f.quote?.total ?? 0).toFixed(0)}</span>
-                  <span style={{ textAlign: 'right', color: '#00cc66' }}>₹{((f.quote?.total ?? 0) * 0.85).toFixed(0)}</span>
-                  <span style={{ textAlign: 'right' }}>
-                    <span style={{ background: '#00cc6618', color: '#00cc66', borderRadius: 4, padding: '1px 5px', fontSize: 9, fontWeight: 600 }}>Paid</span>
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div style={{ fontSize: 9, color: T.textFaint, textAlign: 'center' }}>
-              Payouts are processed weekly to your registered bank account. Platform fee 15%.
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* ── Admin Tab ───────────────────────────────────── */}
-      {tab === 'admin' && role === 'admin' && (() => {
-        const totalFranchises = 1
-        const totalOrders = orders.length + feedback.length
-        const globalRevenue = feedback.filter(f => f.quote).reduce((s, f) => s + (f.quote?.total ?? 0), 0)
-
-        return (
-          <div style={{ padding: '16px 20px' }}>
-            <SectionHead>Global Stats</SectionHead>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))', gap: 10, marginBottom: 20 }}>
-              {[
-                ['Franchises', totalFranchises, '#00cc66', 'Active partners'],
-                ['Total Orders', totalOrders, '#4a9eff', 'All time'],
-                ['Platform Revenue', `₹${(globalRevenue * 0.15).toFixed(0)}`, '#ff9800', '15% of ₹' + globalRevenue.toFixed(0)],
-                ['Printers Online', printers.filter(p => p.status !== 'offline').length, T.text, `of ${printers.length} total`],
-              ].map(([label, val, color, sub]) => (
-                <div key={label} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ fontSize: 10, color: T.textDim, marginBottom: 4 }}>{label}</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: color, marginBottom: 2 }}>{val}</div>
-                  <div style={{ fontSize: 9, color: T.textFaint }}>{sub}</div>
-                </div>
-              ))}
-            </div>
-
-            <SectionHead>Franchise List</SectionHead>
-            <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, overflow: 'hidden', marginBottom: 20 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px', fontSize: 9, fontWeight: 600, color: T.textFaint, padding: '8px 12px', borderBottom: `1px solid ${T.border}` }}>
-                <span>FRANCHISE</span><span style={{ textAlign: 'right' }}>PRINTERS</span><span style={{ textAlign: 'right' }}>ORDERS</span><span style={{ textAlign: 'right' }}>REVENUE</span>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 80px 80px 80px', fontSize: 10, color: T.text, padding: '9px 12px', alignItems: 'center' }}>
-                <div>
-                  <div style={{ fontWeight: 600 }}>This Farm</div>
-                  <div style={{ fontSize: 9, color: T.textFaint }}>{apiUrlRef.current || 'localhost'}</div>
-                </div>
-                <span style={{ textAlign: 'right' }}>{printers.length}</span>
-                <span style={{ textAlign: 'right' }}>{totalOrders}</span>
-                <span style={{ textAlign: 'right', color: '#00cc66' }}>₹{globalRevenue.toFixed(0)}</span>
-              </div>
-            </div>
-
-            <SectionHead>Order Routing</SectionHead>
-            <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: '12px 14px', marginBottom: 20 }}>
-              <div style={{ fontSize: 10, color: T.textDim, marginBottom: 8 }}>Routing strategy</div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                {['nearest', 'round-robin', 'manual'].map(s => (
-                  <div key={s} style={{ fontSize: 10, padding: '4px 10px', borderRadius: 6, background: s === 'nearest' ? '#00cc6618' : T.sectionBg, color: s === 'nearest' ? '#00cc66' : T.textDim, fontWeight: s === 'nearest' ? 600 : 400, cursor: 'pointer' }}>
-                    {s}
-                  </div>
-                ))}
-              </div>
-              <div style={{ fontSize: 9, color: T.textFaint, marginTop: 8 }}>
-                Currently routing to nearest available franchise with capacity. Hermes job engine handles assignment.
-              </div>
-            </div>
-          </div>
-        )
-      })()}
-
     </div>
   </ThemeCtx.Provider>
   )
