@@ -79,3 +79,4 @@ storage/
 *.key
 *.crt
 secrets/
+.env*
