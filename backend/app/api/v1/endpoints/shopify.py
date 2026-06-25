@@ -136,8 +136,10 @@ async def shopify_webhook(
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
 
+    # Stamp the topic so the row's history can show what triggered it
+    order["_shopify_topic"] = x_shopify_topic
     background_tasks.add_task(_process_order, order)
-    return {"status": "queued", "order_id": order.get("id")}
+    return {"status": "queued", "order_id": order.get("id"), "topic": x_shopify_topic}
 
 
 async def _process_order(order: dict):
@@ -171,7 +173,12 @@ async def _process_order(order: dict):
         "total_inr": total,
         "note": note,
         "line_items": [
-            {"title": li.get("title"), "sku": li.get("sku"), "qty": li.get("quantity", 1)}
+            {
+                "title": li.get("title"),
+                "sku": li.get("sku"),
+                "qty": li.get("quantity", 1),
+                "shopify_line_item_id": li.get("id"),  # numeric, for fulfillment API
+            }
             for li in order.get("line_items", [])
         ],
         # status intentionally NOT set here — add_shopify_order() defaults it to "NEW"
